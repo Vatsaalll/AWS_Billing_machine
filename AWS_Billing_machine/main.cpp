@@ -1,166 +1,170 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <string>
 #include <map>
 #include <vector>
-#include <cmath>
 #include <iomanip>
-#include <ctime>
-#include <filesystem>
+#include <cmath>
+#include <sys/stat.h>
 
 using namespace std;
 
-// Structure to hold usage data
-struct UsageRecord {
-    string customerID;
-    string instanceID;
-    string instanceType;
-    time_t usedFrom;
-    time_t usedUntil;
-};
-
-// Structure to hold monthly usage details
-struct MonthlyUsage {
-    int resourceCount;
-    double totalHours;
-};
-
-// Helper function to convert string to time_t
-time_t parseTimestamp(const string& timestamp) {
-    struct tm timeStruct = {};
-    strptime(timestamp.c_str(), "%Y-%m-%dT%H:%M:%S", &timeStruct);
-    return mktime(&timeStruct);
-}
-
-// Helper function to calculate hours used, split by months
-map<string, double> calculateUsageByMonth(time_t start, time_t end) {
-    map<string, double> hoursByMonth;
-    while (start < end) {
-        struct tm startTm = *localtime(&start);
-        struct tm nextMonthTm = startTm;
-        nextMonthTm.tm_mon++;
-        nextMonthTm.tm_mday = 1;
-        nextMonthTm.tm_hour = 0;
-        nextMonthTm.tm_min = 0;
-        nextMonthTm.tm_sec = 0;
-        time_t nextBoundary = mktime(&nextMonthTm);
-
-        time_t intervalEnd = min(nextBoundary, end);
-        double hours = ceil(difftime(intervalEnd, start) / 3600.0);
-
-        char monthKey[8];
-        strftime(monthKey, sizeof(monthKey), "%b-%Y", &startTm);
-        hoursByMonth[monthKey] += hours;
-
-        start = intervalEnd;
+// Function to parse a CSV file
+template <typename Func>
+void parseCSV(const string& filename, Func handler) {
+    ifstream file(filename);
+    if (!file.is_open()) {
+        cerr << "Error: Unable to open file " << filename << endl;
+        return;
     }
-    return hoursByMonth;
-}
 
-// Function to read a CSV file and return a vector of vectors
-vector<vector<string>> readCSV(const string& filepath) {
-    vector<vector<string>> data;
-    ifstream file(filepath);
-    string line, cell;
+    string line;
+    // Skip the header line
+    getline(file, line);
+
     while (getline(file, line)) {
-        vector<string> row;
-        stringstream lineStream(line);
-        while (getline(lineStream, cell, ',')) {
-            row.push_back(cell);
-        }
-        data.push_back(row);
+        handler(line);
     }
-    return data;
+
+    file.close();
 }
 
-// Function to write CSV output
-void writeCSV(const string& filepath, const vector<vector<string>>& data) {
-    ofstream file(filepath);
-    for (const auto& row : data) {
-        for (size_t i = 0; i < row.size(); ++i) {
-            file << row[i];
-            if (i < row.size() - 1) file << ",";
-        }
-        file << "\n";
+// Function to split a string by delimiter
+vector<string> split(const string& str, char delimiter) {
+    vector<string> tokens;
+    istringstream stream(str);
+    string token;
+    while (getline(stream, token, delimiter)) {
+        tokens.push_back(token);
     }
+    return tokens;
+}
+
+// Function to convert hours to HH:mm:ss format
+string formatTime(double hours) {
+    int totalSeconds = static_cast<int>(round(hours * 3600));
+    int hh = totalSeconds / 3600;
+    int mm = (totalSeconds % 3600) / 60;
+    int ss = totalSeconds % 60;
+    ostringstream formattedTime;
+    formattedTime << setw(2) << setfill('0') << hh << ":"
+                  << setw(2) << setfill('0') << mm << ":"
+                  << setw(2) << setfill('0') << ss;
+    return formattedTime.str();
+}
+
+// Function to check if a directory exists
+bool directoryExists(const string& path) {
+    struct stat info;
+    if (stat(path.c_str(), &info) != 0) {
+        return false;
+    }
+    return (info.st_mode & S_IFDIR) != 0;
 }
 
 int main() {
-    // Read input CSVs
-    auto usageData = readCSV("AWSResourceUsage.csv");
-    auto resourceTypesData = readCSV("AWSResourceTypes.csv");
-    auto customerData = readCSV("Customer.csv");
+    // Output directory for generated CSV files
+    string outputDirectory;
+    cout << "Enter the directory to save output files: ";
+    cin >> outputDirectory;
 
-    // Map instance type to rate
-    map<string, double> instanceRates;
-    for (size_t i = 1; i < resourceTypesData.size(); ++i) { // Skip header
-        instanceRates[resourceTypesData[i][0]] = stod(resourceTypesData[i][1].substr(1)); // Remove "$" and convert
+    // Ensure the output directory exists
+    if (!directoryExists(outputDirectory)) {
+        cerr << "Error: Directory " << outputDirectory << " does not exist. Exiting program." << endl;
+        return 1;
     }
 
-    // Map customer ID to customer name
-    map<string, string> customerNames;
-    for (size_t i = 1; i < customerData.size(); ++i) { // Skip header
-        customerNames[customerData[i][0]] = customerData[i][1];
+    // Ensure the directory path ends with '/'
+    if (outputDirectory.back() != '/' && outputDirectory.back() != '\\') {
+        outputDirectory += '/';
     }
 
-    // Process usage records
-    vector<UsageRecord> usageRecords;
-    for (size_t i = 1; i < usageData.size(); ++i) { // Skip header
-        UsageRecord record = {
-            usageData[i][0],
-            usageData[i][1],
-            usageData[i][2],
-            parseTimestamp(usageData[i][3]),
-            parseTimestamp(usageData[i][4])
-        };
-        usageRecords.push_back(record);  
-    }
+    // Maps to store data
+    map<string, string> customerNames; // CustomerID -> CustomerName
+    map<string, map<string, map<string, double>>> resourceUsage; // CustomerID -> Month -> ResourceType -> Hours
+    map<string, double> resourceRates; // ResourceType -> Rate per Hour
 
-    // Map for monthly billing
-    map<string, map<string, map<string, MonthlyUsage>>> monthlyBills;
-
-    // Aggregate usage data
-    for (const auto& record : usageRecords) {
-        auto usageByMonth = calculateUsageByMonth(record.usedFrom, record.usedUntil);
-        for (const auto& [month, hours] : usageByMonth) {
-            auto& usage = monthlyBills[record.customerID][month][record.instanceType];
-            usage.resourceCount++;
-            usage.totalHours += hours;
+    // Parse Customer.csv
+    parseCSV("Customer.csv", [&](const string& line) {
+        vector<string> tokens = split(line, ',');
+        if (tokens.size() >= 2) {
+            string customerID = tokens[0];
+            string customerName = tokens[1];
+            customerNames[customerID] = customerName;
         }
-    }
+    });
 
-    // Generate output CSVs
-    filesystem::create_directory("monthly_bills");
-    for (const auto& [customerID, monthlyData] : monthlyBills) {
-        string customerName = customerNames[customerID];
-        for (const auto& [month, usageData] : monthlyData) {
-            vector<vector<string>> output;
-            output.push_back({"Instance Type", "Resource Count", "Total Hours", "Rate/Hour", "Cost"});
-            double totalCost = 0;
+    // Parse AWSResourceTypes.csv
+    parseCSV("AWSResourceTypes.csv", [&](const string& line) {
+        vector<string> tokens = split(line, ',');
+        if (tokens.size() >= 2) {
+            string resourceType = tokens[0];
+            double rate = stod(tokens[1]);
+            resourceRates[resourceType] = rate;
+        }
+    });
 
-            for (const auto& [instanceType, usage] : usageData) {
-                double rate = instanceRates[instanceType];
-                double cost = usage.totalHours * rate;
-                totalCost += cost;
+    // Parse AWSResourceUsage.csv
+    parseCSV("AWSResourceUsage.csv", [&](const string& line) {
+        vector<string> tokens = split(line, ',');
+        if (tokens.size() >= 4) {
+            string customerID = tokens[0];
+            string resourceType = tokens[1];
+            string month = tokens[2].substr(0, 7); // Extract YYYY-MM
+            double hours = stod(tokens[3]);
 
-                output.push_back({
-                    instanceType,
-                    to_string(usage.resourceCount),
-                    to_string(usage.totalHours),
-                    "$" + to_string(rate),
-                    "$" + to_string(cost)
-                });
+            resourceUsage[customerID][month][resourceType] += hours;
+        }
+    });
+
+    // Generate bills and write to CSV
+    for (const auto& customer : resourceUsage) {
+        const string& customerID = customer.first;
+        const auto& monthlyUsage = customer.second;
+
+        for (const auto& monthEntry : monthlyUsage) {
+            const string& month = monthEntry.first;
+            const auto& resources = monthEntry.second;
+            double totalAmount = 0.0;
+
+            // Calculate total amount
+            for (const auto& resource : resources) {
+                const string& resourceType = resource.first;
+                double hours = resource.second;
+                totalAmount += ceil(hours) * resourceRates[resourceType];
             }
 
-            // Add summary row
-            output.push_back({"", "", "", "Total Cost", "$" + to_string(totalCost)});
+            // Write to CSV file
+            ostringstream filename;
+            filename << outputDirectory << customerID << "_" << month << ".csv";
+            ofstream outFile(filename.str());
 
-            // Write to CSV
-            string filename = "monthly_bills/" + customerID + "_" + month + ".csv";
-            writeCSV(filename, output);
+            if (!outFile.is_open()) {
+                cerr << "Error: Unable to write to file " << filename.str() << endl;
+                continue;
+            }
+
+            // Write CSV content
+            outFile << customerNames[customerID] << "\n";
+            outFile << "Bill for month of " << month << "\n";
+            outFile << "Total Amount: $" << fixed << setprecision(4) << totalAmount << "\n\n";
+            outFile << "Resource Type,Total Resources,Total Used Time (HH:mm:ss),Total Billed Time (HH:mm:ss),Rate (per hour),Total Amount\n";
+
+            for (const auto& resource : resources) {
+                const string& resourceType = resource.first;
+                double totalHours = resource.second;
+                double billedHours = ceil(totalHours); // Assume full billing hours
+                double rate = resourceRates[resourceType];
+                double amount = billedHours * rate;
+
+                outFile << resourceType << ",1," << formatTime(totalHours) << "," << formatTime(billedHours) << "," << fixed << setprecision(4) << rate << "," << amount << "\n";
+            }
+
+            outFile.close();
+            cout << "Generated bill: " << filename.str() << endl;
         }
     }
 
-    cout << "Monthly bills generated successfully in the 'monthly_bills' directory.\n";
     return 0;
 }
