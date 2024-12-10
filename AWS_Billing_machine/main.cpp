@@ -63,6 +63,19 @@ bool directoryExists(const string& path) {
     return (info.st_mode & S_IFDIR) != 0;
 }
 
+// Function to safely convert a string to double
+double safeStod(const string& str, double defaultValue = 0.0) {
+    try {
+        return stod(str);
+    } catch (const invalid_argument&) {
+        cerr << "Warning: Invalid numeric value encountered: " << str << endl;
+        return defaultValue;
+    } catch (const out_of_range&) {
+        cerr << "Warning: Numeric value out of range: " << str << endl;
+        return defaultValue;
+    }
+}
+
 int main() {
     // Output directory for generated CSV files
     string outputDirectory;
@@ -100,7 +113,7 @@ int main() {
         vector<string> tokens = split(line, ',');
         if (tokens.size() >= 2) {
             string resourceType = tokens[0];
-            double rate = stod(tokens[1]);
+            double rate = safeStod(tokens[1]);
             resourceRates[resourceType] = rate;
         }
     });
@@ -112,9 +125,11 @@ int main() {
             string customerID = tokens[0];
             string resourceType = tokens[1];
             string month = tokens[2].substr(0, 7); // Extract YYYY-MM
-            double hours = stod(tokens[3]);
+            double hours = safeStod(tokens[3]);
 
             resourceUsage[customerID][month][resourceType] += hours;
+        } else {
+            cerr << "Warning: Skipping malformed line: " << line << endl;
         }
     });
 
