@@ -5,181 +5,182 @@
 #include <map>
 #include <vector>
 #include <iomanip>
-#include <cmath>
-#include <sys/stat.h>
+#include <ctime>
+#include <math.h>
 
 using namespace std;
 
-// Function to parse a CSV file
-template <typename Func>
-void parseCSV(const string& filename, Func handler) {
-    ifstream file(filename);
-    if (!file.is_open()) {
-        cerr << "Error: Unable to open file " << filename << endl;
+// Function to calculate hours between two timestamps
+double calculateHours(const string &startTime, const string &endTime)
+{
+    struct tm start{}, end{};
+
+    istringstream ssStart(startTime);
+    istringstream ssEnd(endTime);
+
+    ssStart >> get_time(&start, "%Y-%m-%dT%H:%M:%S");
+    ssEnd >> get_time(&end, "%Y-%m-%dT%H:%M:%S");
+
+    if (ssStart.fail() || ssEnd.fail())
+    {
+        cerr << "Error: Time format invalid for: " << startTime << " or " << endTime << endl;
+        return 0.0;
+    }
+
+    time_t startEpoch = mktime(&start);
+    time_t endEpoch = mktime(&end);
+
+    if (startEpoch == -1 || endEpoch == -1)
+    {
+        cerr << "Error: mktime failed for: " << startTime << " or " << endTime << endl;
+        return 0.0;
+    }
+
+    return difftime(endEpoch, startEpoch) / 3600.0; // Difference in hours
+}
+
+// Function to convert numeric month to name
+string getMonthName(int month)
+{
+    const string months[] = {"January", "February", "March", "April", "May", "June",
+                             "July", "August", "September", "October", "November", "December"};
+    if (month < 1 || month > 12)
+        return "Invalid";
+    return months[month - 1];
+}
+
+void generateMonthlyBills(const string &customerFile, const string &resourceTypeFile, const string &usageFile, const string &outputDirectory)
+{
+    ifstream customerStream(customerFile);
+    ifstream resourceTypeStream(resourceTypeFile);
+    ifstream usageStream(usageFile);
+
+    if (!customerStream || !resourceTypeStream || !usageStream)
+    {
+        cerr << "Error: Unable to open input files." << endl;
         return;
     }
 
+    // Load customer data
+    map<string, string> customers;
     string line;
-    // Skip the header line
-    getline(file, line);
-
-    while (getline(file, line)) {
-        handler(line);
+    getline(customerStream, line); // Skip header
+    while (getline(customerStream, line))
+    {
+        stringstream ss(line);
+        string srNo, customerID, customerName;
+        getline(ss, srNo, ',');
+        getline(ss, customerID, ',');
+        getline(ss, customerName, ',');
+        customers[customerID] = customerName; // Map customerID to customerName
     }
 
-    file.close();
-}
-
-// Function to split a string by delimiter
-vector<string> split(const string& str, char delimiter) {
-    vector<string> tokens;
-    istringstream stream(str);
-    string token;
-    while (getline(stream, token, delimiter)) {
-        tokens.push_back(token);
-    }
-    return tokens;
-}
-
-// Function to convert hours to HH:mm:ss format
-string formatTime(double hours) {
-    int totalSeconds = static_cast<int>(round(hours * 3600));
-    int hh = totalSeconds / 3600;
-    int mm = (totalSeconds % 3600) / 60;
-    int ss = totalSeconds % 60;
-    ostringstream formattedTime;
-    formattedTime << setw(2) << setfill('0') << hh << ":"
-                  << setw(2) << setfill('0') << mm << ":"
-                  << setw(2) << setfill('0') << ss;
-    return formattedTime.str();
-}
-
-// Function to check if a directory exists
-bool directoryExists(const string& path) {
-    struct stat info;
-    if (stat(path.c_str(), &info) != 0) {
-        return false;
-    }
-    return (info.st_mode & S_IFDIR) != 0;
-}
-
-// Function to safely convert a string to double
-double safeStod(const string& str, double defaultValue = 0.0) {
-    try {
-        return stod(str);
-    } catch (const invalid_argument&) {
-        cerr << "Warning: Invalid numeric value encountered: " << str << endl;
-        return defaultValue;
-    } catch (const out_of_range&) {
-        cerr << "Warning: Numeric value out of range: " << str << endl;
-        return defaultValue;
-    }
-}
-
-int main() {
-    // Output directory for generated CSV files
-    string outputDirectory;
-    cout << "Enter the directory to save output files: ";
-    cin >> outputDirectory;
-
-    // Ensure the output directory exists
-    if (!directoryExists(outputDirectory)) {
-        cerr << "Error: Directory " << outputDirectory << " does not exist. Exiting program." << endl;
-        return 1;
+    // Load resource type data
+    map<string, double> resourceRates;
+    getline(resourceTypeStream, line); // Skip header
+    while (getline(resourceTypeStream, line))
+    {
+        stringstream ss(line);
+        string srNo, instanceType, chargePerHour;
+        getline(ss, srNo, ',');
+        getline(ss, instanceType, ',');
+        getline(ss, chargePerHour, ',');
+        resourceRates[instanceType] = stod(chargePerHour.substr(1)); // Remove '$' and convert to double
     }
 
-    // Ensure the directory path ends with '/'
-    if (outputDirectory.back() != '/' && outputDirectory.back() != '\\') {
-        outputDirectory += '/';
+    // Process usage data
+    map<string, map<string, map<string, double>>> monthlyUsage; // customerID -> monthYear -> resourceType -> totalHours
+    getline(usageStream, line);                                 // Skip header
+    while (getline(usageStream, line))
+    {
+        stringstream ss(line);
+        string srNo, customerID, instanceID, instanceType, usedFrom, usedUntil;
+        getline(ss, srNo, ',');
+        getline(ss, customerID, ',');
+        getline(ss, instanceID, ',');
+        getline(ss, instanceType, ',');
+        getline(ss, usedFrom, ',');
+        getline(ss, usedUntil, ',');
+
+        double hoursUsed = calculateHours(usedFrom, usedUntil);
+        string monthYear = usedFrom.substr(0, 7); // Extract YYYY-MM
+
+        monthlyUsage[customerID][monthYear][instanceType] += hoursUsed;
     }
 
-    // Maps to store data
-    map<string, string> customerNames; // CustomerID -> CustomerName
-    map<string, map<string, map<string, double>>> resourceUsage; // CustomerID -> Month -> ResourceType -> Hours
-    map<string, double> resourceRates; // ResourceType -> Rate per Hour
+    // Generate monthly bills
+    for (const auto &customer : monthlyUsage)
+    {
+        const string &customerID = customer.first;
+        for (const auto &monthData : customer.second)
+        {
+            const string &monthYear = monthData.first;
+            const auto &resourceUsage = monthData.second;
 
-    // Parse Customer.csv
-    parseCSV("Customer.csv", [&](const string& line) {
-        vector<string> tokens = split(line, ',');
-        if (tokens.size() >= 2) {
-            string customerID = tokens[0];
-            string customerName = tokens[1];
-            customerNames[customerID] = customerName;
-        }
-    });
+            // Extract month and year
+            string year = monthYear.substr(0, 4);
+            int month = stoi(monthYear.substr(5, 2));
+            string monthName = getMonthName(month);
 
-    // Parse AWSResourceTypes.csv
-    parseCSV("AWSResourceTypes.csv", [&](const string& line) {
-        vector<string> tokens = split(line, ',');
-        if (tokens.size() >= 2) {
-            string resourceType = tokens[0];
-            double rate = safeStod(tokens[1]);
-            resourceRates[resourceType] = rate;
-        }
-    });
-
-    // Parse AWSResourceUsage.csv
-    parseCSV("AWSResourceUsage.csv", [&](const string& line) {
-        vector<string> tokens = split(line, ',');
-        if (tokens.size() >= 4) {
-            string customerID = tokens[0];
-            string resourceType = tokens[1];
-            string month = tokens[2].substr(0, 7); // Extract YYYY-MM
-            double hours = safeStod(tokens[3]);
-
-            resourceUsage[customerID][month][resourceType] += hours;
-        } else {
-            cerr << "Warning: Skipping malformed line: " << line << endl;
-        }
-    });
-
-    // Generate bills and write to CSV
-    for (const auto& customer : resourceUsage) {
-        const string& customerID = customer.first;
-        const auto& monthlyUsage = customer.second;
-
-        for (const auto& monthEntry : monthlyUsage) {
-            const string& month = monthEntry.first;
-            const auto& resources = monthEntry.second;
-            double totalAmount = 0.0;
-
-            // Calculate total amount
-            for (const auto& resource : resources) {
-                const string& resourceType = resource.first;
-                double hours = resource.second;
-                totalAmount += ceil(hours) * resourceRates[resourceType];
-            }
-
-            // Write to CSV file
-            ostringstream filename;
-            filename << outputDirectory << customerID << "_" << month << ".csv";
-            ofstream outFile(filename.str());
-
-            if (!outFile.is_open()) {
-                cerr << "Error: Unable to write to file " << filename.str() << endl;
+            // Prepare output file
+            string outputFile = outputDirectory + "/" + customerID + "_" + monthName.substr(0, 3) + "-" + year + ".csv";
+            ofstream outFile(outputFile);
+            if (!outFile)
+            {
+                cerr << "Error: Unable to create file " << outputFile << endl;
                 continue;
             }
 
-            // Write CSV content
-            outFile << customerNames[customerID] << "\n";
-            outFile << "Bill for month of " << month << "\n";
-            outFile << "Total Amount: $" << fixed << setprecision(4) << totalAmount << "\n\n";
-            outFile << "Resource Type,Total Resources,Total Used Time (HH:mm:ss),Total Billed Time (HH:mm:ss),Rate (per hour),Total Amount\n";
+            double totalAmount = 0.0;
 
-            for (const auto& resource : resources) {
-                const string& resourceType = resource.first;
-                double totalHours = resource.second;
-                double billedHours = ceil(totalHours); // Assume full billing hours
-                double rate = resourceRates[resourceType];
-                double amount = billedHours * rate;
-
-                outFile << resourceType << ",1," << formatTime(totalHours) << "," << formatTime(billedHours) << "," << fixed << setprecision(4) << rate << "," << amount << "\n";
+            if (customers.find(customerID) != customers.end())
+            {
+                outFile << customers[customerID] << "\n";
             }
 
+            // Write bill header
+            outFile << "Bill for month of " << monthName << " " << year << "\n";
+
+            // Write resource usage
+            outFile << "Resource Type,Total Resources,Total Used Time (HH:mm:ss),Total Billed Time (HH:mm:ss),Rate (per hour),Total Amount\n";
+
+            for (const auto &usage : resourceUsage)
+            {
+                const string &resourceType = usage.first;
+                double totalHours = usage.second;
+                double ratePerHour = resourceRates[resourceType];
+                double amount = totalHours * ratePerHour;
+                totalAmount += amount;
+
+                int totalResources = 1; // Assuming 1 resource type per instance
+                int billedHours = ceil(totalHours);
+
+                outFile << resourceType << ","
+                        << totalResources << ","
+                        << fixed << setprecision(2) << totalHours << ","
+                        << billedHours << ":00:00,"
+                        << "$" << ratePerHour << ","
+                        << "$" << amount << "\n";
+            }
+
+            outFile << "Total Amount: $" << fixed << setprecision(2) << totalAmount << "\n";
             outFile.close();
-            cout << "Generated bill: " << filename.str() << endl;
+            cout << "Generated bill: " << outputFile << endl;
         }
     }
+}
+
+int main()
+{
+    string customerFile = "Customer.csv";
+    string resourceTypeFile = "AWSResourceTypes.csv";
+    string usageFile = "AWSResourceUsage.csv";
+    string outputDirectory;
+
+    cout << "Enter the directory to save output files: ";
+    cin >> outputDirectory;
+
+    generateMonthlyBills(customerFile, resourceTypeFile, usageFile, outputDirectory);
 
     return 0;
 }
