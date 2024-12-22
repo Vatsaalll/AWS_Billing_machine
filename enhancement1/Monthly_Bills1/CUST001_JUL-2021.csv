@@ -1,0 +1,8 @@
+Customer: ANC Corporation
+Bill for month of JUL 2021
+Region,Resource Type,OS,Total Resources,Total Used Time (Hours),Total Billed Time (Hours),Total Amount,Discount,Actual Amount
+Asia(Mumbai),t3.medium,Windows,1,123.76,123.76,6.19,0.00,6.19
+
+Total Amount: $6.19
+Total Discount: $0.00
+Actual Amount: $6.19

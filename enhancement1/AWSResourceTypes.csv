@@ -1,0 +1,7 @@
+Sr. No.,Instance Type,Charge/Hour(OnDemand),Charge/Hour(Reserved),Region
+1,t3.micro,0.0104,0.085,US(Ohio)
+2,t3.small,0.0209,0.0185,US(Ohio)
+3,t3.medium,0.0418,0.0385,US(Ohio)
+4,t3.micro,0.0125,0.01,Asia(Mumbai)
+5,t3.small,0.03,0.025,Asia(Mumbai)
+6,t3.medium,0.05,0.045,Asia(Mumbai)

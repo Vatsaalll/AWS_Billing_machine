@@ -1,0 +1,3 @@
+Sr. No.,Customer ID,EC2 Instance ID,EC2 Instance Type,Start Date,End Date,Region,OS
+1,CUST001,t3-wedjh,t3.medium,08/15/2021,08/15/2022,US(Ohio),Linux
+2,CUST002,t3-hsasa,t3.medium,06/15/2021,08/15/2024,Asia(Mumbai),Windows

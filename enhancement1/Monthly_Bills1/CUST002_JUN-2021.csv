@@ -1,0 +1,8 @@
+Customer: XVZ Corporation
+Bill for month of JUN 2021
+Region,Resource Type,OS,Total Resources,Total Used Time (Hours),Total Billed Time (Hours),Total Amount,Discount,Actual Amount
+Asia(Mumbai),t3.medium,Windows,1,1469.51,1469.51,73.48,0.00,73.48
+
+Total Amount: $73.48
+Total Discount: $0.00
+Actual Amount: $73.48

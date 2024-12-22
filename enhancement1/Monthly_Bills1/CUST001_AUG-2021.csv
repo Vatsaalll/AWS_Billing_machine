@@ -1,0 +1,9 @@
+Customer: ANC Corporation
+Bill for month of AUG 2021
+Region,Resource Type,OS,Total Resources,Total Used Time (Hours),Total Billed Time (Hours),Total Amount,Discount,Actual Amount
+US(Ohio),t3.medium,Linux,1,5.51,5.51,0.28,0.00,0.28
+US(Ohio),t3.small,Linux,1,241.73,241.73,7.25,0.00,7.25
+
+Total Amount: $7.53
+Total Discount: $0.00
+Actual Amount: $7.53

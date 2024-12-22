@@ -1,0 +1,5 @@
+Sr. No.,Customer ID,EC2 Instance ID,EC2 Instance Type,Used from,Used Until,Region,OS
+1,CUST001,t3-wedjh,t3.medium,2021-08-15T10:00:00,2021-08-15T15:30:45,US(Ohio),Linux
+2,CUST002,t3-hsasa,t3.medium,2021-06-15T10:00:00,2021-08-15T15:30:45,Asia(Mumbai),Windows
+3,CUST001,t3-gsadjh,t3.small,2021-08-05T10:50:00,2021-08-15T12:33:48,US(Ohio),Linux
+4,CUST001,t3-wedjh,t3.medium,2021-07-10T11:45:00,2021-07-15T15:30:45,Asia(Mumbai),Windows
