@@ -1,0 +1,6 @@
+ANC Corporation
+Bill for month of August 2021
+Resource Type,Total Resources,Total Used Time (HH:mm:ss),Total Billed Time (HH:mm:ss),Rate (per hour),Total Amount
+t3.medium,1,5.51,6:00:00,$0.04,$0.23
+t3.small,1,244.26,245:00:00,$0.02,$5.11
+Total Amount: $5.34
