@@ -1,0 +1,7 @@
+Customer: CUST001
+Bill for month of MAY 2021
+Region,IP Address,Total Allocation Time,Total Billed Time,Amount
+US(Ohio),52.45.78.90,50 hours,44 hours,$0.22
+IN(Mumbai),52.45.78.91,146 hours,0 hours,$0.00
+US(Ohio),52.45.78.90,26 hours,8 hours,$0.04
+Total Amount: $0.26
